@@ -20,8 +20,6 @@ catch(abort,):
 catch(x,f) -> x,
 catch({'abort() -> k},f) -> f()
 
-qes(x,y) -> x
-
 protect(f) -> {|s -> 'get()
 		t([x,s]) -> 'set(s); x
 	       |}t(state(s,f()))
@@ -60,35 +58,58 @@ map(f,[]) -> []
 
 punc(cs) -> map(gimme,cs); gap()
 
+leaf() -> choice([{['var,ident()]}, {['atom,gimme([|'|]);ident()]}])
+
 exp() -> choice(
-  [{app(['var,ident()])}
-  ,{app(['atom,gimme([|'|]);ident()])}
+  [{app(leaf())}
   ,{punc([|[|]); lisp(exp)}
+  ,{['let/punc([|{\||]),many({def()/ gap()})/punc([|\|}|]),exp()]}
+  ,{['fun/punc([|{|])| choice(
+     [{[[], [[],exp()]]}
+     ,{[choice([handles,{[]}]) | csep(clause, [])]}
+     ])/ gap(); punc([|}|])]}
   ])
 
+handles() -> punc([|(|]); csep({many({ident()/ gap()})}, [|)|])/
+  gap(); punc([|:|])
+
 lisp(f) -> {|
-  nil() -> gimme([|]|]);['atom,[||]]
+  nil() -> gimme([|]|]); ['atom,[||]]
   cell() -> ['cons,f(),cdr()]
-  cdr() -> gap();choice(
-    [nil
-    ,{punc([|\||]); qes(f(),gap();gimme([|]|]))}
-    ,{punc([|,|]); cell()}
-    ])
+  cdr() -> gap(); choice(
+    [nil,{punc([|\||]); f()/ gap(); gimme([|]|])},{punc([|,|]); cell()}])
   |}choice([nil,cell])
+
+clause() -> [punc([|(|]); csep(pat,[|)|]), gap(); punc([|->|]); exp()]
+
+pat() -> choice(
+  [{['thunk, punc([|{|]); ident()/ gap(); gimme([|}|])]}
+  ,{['call, punc([|{|]); ident()/ gap(), punc([|(|]); csep(pat,[|)|]),
+     gap(); punc([|->|]); ident()/ gap(); gimme([|}|])]}
+  ,{['val, vpat()]}
+  ])
+
+vpat() -> choice(
+  [{leaf()}
+  ,{app(['eq, punc([|=|]); ident()])}
+  ,{punc([|[|]); lisp(vpat)}
+  ])
+
+def() -> choice([{['val,ident(),gap(); punc([|->|]); exp()]},{rules(ident())}])
+
+rules(f) -> ['def, f| choice(
+  [{[handles() | gap(); csep({map(gimme,f); clause()},[])]}
+  ,{[[], clause() | many({gap();map(gimme,f); clause()})]}
+  ])]
 
 csep(f,t) -> {|
   end() -> map(gimme,t); []
-  more() -> gap(); choice(
-      [{[punc([|,|]); f()|more()]}
-      ,end
-      ])
-  |}choice(
-  [{[f()|more()]}
-  ,end
-  ])
+  more() -> gap(); choice([{[punc([|,|]); f()|more()]},end])
+  |}choice([{[f()|more()]},end])
   
 app(f) -> choice(
   [{punc([|(|]); app(['app,f|csep(exp,[|)|])])}
   ,{punc([|;|]); app(['seq,f,exp()])}
+  ,{punc([|/|]); app(['qes,f,exp()])}
   ,{f}
   ])

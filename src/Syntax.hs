@@ -11,6 +11,7 @@ data Exp
   | Exp :& Exp
   | Exp :$ [Exp]
   | Exp :! Exp
+  | Exp :// Exp
   | EF [[String]] [([Pat], Exp)]
   | [Def Exp] :- Exp
   | EX [Either Char Exp]
@@ -80,6 +81,7 @@ pLisp p n c = pGap *> (n <$ pP "]" <|> c <$> p <*> pCdr) where
 pApp :: Exp -> P Exp
 pApp f = (((f :$) <$ pP "(" <*> pCSep pExp ")") >>= pApp)
        <|> (((f :!) <$ pP ";" <* pGap <*> pExp) >>= pApp)
+       <|> (((f ://) <$ pP "/" <* pGap <*> pExp) >>= pApp)
        <|> pure f
 
 pCSep :: P x -> String -> P [x]

@@ -30,6 +30,8 @@ data Frame
   | Fun Env [Exp]
   | Arg [String] Val [Comp] Env [[String]] [Exp]
   | Seq Env Exp
+  | Qes Env Exp
+  | Qed Val
   | Def Env [Def Val] String [Def Exp] Exp
   | Txt Env [Char] [Either Char Exp]
   deriving Show
@@ -52,6 +54,7 @@ compute g (EA a)       ls = consume (VA a) ls
 compute g (a :& d)     ls = compute g a (Car g d : ls)
 compute g (f :$ as)    ls = compute g f (Fun g as : ls)
 compute g (e :! f)     ls = compute g e (Seq g f : ls)
+compute g (e :// f)    ls = compute g e (Qes g f : ls)
 compute g (EF hss pes) ls = consume (VF g hss pes) ls
 compute g (ds :- e)    ls = define g [] ds e ls
 compute g (EX ces)     ls = combine g [] ces ls
@@ -62,6 +65,8 @@ consume v (Cdr u               : ls) = consume (u :&& v) ls
 consume v (Fun g as            : ls) = args v [] g (handles v) as ls
 consume v (Arg _ f cs g hss es : ls) = args f (Ret v : cs) g hss es ls
 consume _ (Seq g e             : ls) = compute g e ls
+consume v (Qes g e             : ls) = compute g e (Qed v : ls)
+consume _ (Qed v               : ls) = consume v ls
 consume v (Def g dvs x des e   : ls) = define g ((x := v) : dvs) des e ls
 consume v (Txt g cs ces        : ls) = combine g (revapp (txt v) cs) ces ls
 consume v []                         = Ret v
