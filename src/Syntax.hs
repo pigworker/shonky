@@ -10,12 +10,14 @@ data Exp
   | EA String
   | Exp :& Exp
   | Exp :$ [Exp]
+  | Exp :! Exp
   | EF [[String]] [([Pat], Exp)]
   | [Def Exp] :- Exp
   | EX [Either Char Exp]
   deriving Show
 infixr 6 :&
 infixl 5 :$
+infixr 4 :!
 
 data Def v
   = String := v
@@ -56,10 +58,10 @@ pExp = (EV <$> pId >>= pApp)
      <|> (:-) <$ pP "{|" <*> many (pGap *> pDef) <* pGap <* pP "|}"
                  <* pGap <*> pExp
      <|> thunk <$ pP "{" <* pGap <*> pExp <* pGap <* pP "}"
-     <|> EF <$ pP "{" <* pGap <* pP "(" <*> pCSep (many (pId <* pGap)) ")"
-          <* pGap <* pP ":" <* pGap <*>
-         pCSep ((,) <$ pP "(" <*> pCSep pPat ")" <* pGap <* pP "->"
-                <* pGap <*> pExp) "" <* pGap <* pP "}"
+     <|> EF <$ pP "{" <* pGap <*>
+          (id <$ pP "(" <*> pCSep (many (pId <* pGap)) ")"
+              <* pGap <* pP ":" <* pGap
+           <|> pure []) <*> pCSep pClause "" <* pGap <* pP "}"
      where thunk e = EF [] [([], e)]
 
 pText :: P x -> P [Either Char x]
@@ -76,7 +78,9 @@ pLisp p n c = pGap *> (n <$ pP "]" <|> c <$> p <*> pCdr) where
     <|> c <$ pP "," <* pGap <*> p <*> pCdr)
 
 pApp :: Exp -> P Exp
-pApp f = (((f :$) <$ pP "(" <*> pCSep pExp ")") >>= pApp) <|> pure f
+pApp f = (((f :$) <$ pP "(" <*> pCSep pExp ")") >>= pApp)
+       <|> (((f :!) <$ pP ";" <* pGap <*> pExp) >>= pApp)
+       <|> pure f
 
 pCSep :: P x -> String -> P [x]
 pCSep p t = pGap *> ((:) <$> p <*> pMore <|> [] <$ pP t) where
@@ -84,17 +88,23 @@ pCSep p t = pGap *> ((:) <$> p <*> pMore <|> [] <$ pP t) where
 
 pDef :: P (Def Exp)
 pDef = (:=) <$> pId <* pGap <* pP "->" <* pGap <*> pExp
-  <|> ((pId <* pP "(") >>= pRules)
+  <|> (pId >>= pRules)
+
+pClause :: P ([Pat],Exp)
+pClause = (,) <$ pP "(" <*> pCSep pPat ")"
+              <* pGap <* pP "->" <* pGap <*> pExp
 
 pRules :: String -> P (Def Exp)
-pRules f = DF f <$> pCSep (many (pId <* pGap)) ")"
-  <* pGap <* pP ":" <* pGap <*>
-  pCSep ((,) <$ pP f <* pP "(" <*> pCSep pPat ")" <* pGap <* pP "->"
-             <* pGap <*> pExp) ""
-
+pRules f = DF f <$>
+  (id <$ pP "(" <*> pCSep (many (pId <* pGap)) ")" <* pGap
+     <* pP ":" <* pGap) <*>
+  pCSep (pP f *> pClause) ""
+  <|> DF f [] <$> ((:) <$> pClause <*>
+       many (id <$ pGap <* pP "," <* pGap <* pP f <*> pClause))
+    
 pPat :: P Pat
 pPat = PT <$ pP "{" <* pGap <*> pId <* pGap <* pP "}"
-   <|> PC <$ pP "{" <* pGap <*> pId <* pP "(" <*> pCSep pVPat ")"
+   <|> PC <$ pP "{" <* pGap <* pP "'" <*> pId <* pP "(" <*> pCSep pVPat ")"
           <* pGap <* pP "->" <* pGap <*> pId <* pGap <* pP "}"
    <|> PV <$> pVPat
 

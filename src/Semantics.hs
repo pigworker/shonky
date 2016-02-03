@@ -29,25 +29,29 @@ data Frame
   | Cdr Val
   | Fun Env [Exp]
   | Arg [String] Val [Comp] Env [[String]] [Exp]
+  | Seq Env Exp
   | Def Env [Def Val] String [Def Exp] Exp
   | Txt Env [Char] [Either Char Exp]
   deriving Show
 
 fetch :: Env -> String -> Val
-fetch g@(g' :/ ds) y = defetch ds where
-  defetch [] = fetch g' y
-  defetch ((x := v) : ds)
-    | x == y = v
-    | otherwise = defetch ds
-  defetch (DF x hss pes : ds)
-    | x == y = VF g hss pes
-    | otherwise = defetch ds
+fetch g y = go g where
+  go h@(g' :/ ds) = defetch ds where
+    defetch [] = go g'
+    defetch ((x := v) : ds)
+      | x == y = v
+      | otherwise = defetch ds
+    defetch (DF x hss pes : ds)
+      | x == y = VF h hss pes
+      | otherwise = defetch ds
+  go _ = error $ concat ["fetch ",y,show g]
 
 compute :: Env -> Exp -> [Frame] -> Comp
 compute g (EV x)       ls = consume (fetch g x) ls
 compute g (EA a)       ls = consume (VA a) ls
 compute g (a :& d)     ls = compute g a (Car g d : ls)
 compute g (f :$ as)    ls = compute g f (Fun g as : ls)
+compute g (e :! f)     ls = compute g e (Seq g f : ls)
 compute g (EF hss pes) ls = consume (VF g hss pes) ls
 compute g (ds :- e)    ls = define g [] ds e ls
 compute g (EX ces)     ls = combine g [] ces ls
@@ -57,6 +61,7 @@ consume v (Car g d             : ls) = compute g d (Cdr v : ls)
 consume v (Cdr u               : ls) = consume (u :&& v) ls
 consume v (Fun g as            : ls) = args v [] g (handles v) as ls
 consume v (Arg _ f cs g hss es : ls) = args f (Ret v : cs) g hss es ls
+consume _ (Seq g e             : ls) = compute g e ls
 consume v (Def g dvs x des e   : ls) = define g ((x := v) : dvs) des e ls
 consume v (Txt g cs ces        : ls) = combine g (revapp (txt v) cs) ces ls
 consume v []                         = Ret v
@@ -78,6 +83,7 @@ define g dvs ((x := d) : des) e ls =
   where
     defo (DF f hss pes : des) = DF f hss pes : defo des
     defo (_ : des)            = defo des
+    defo []                   = []
 
 handles :: Val -> [[String]]
 handles (VF _ hss _) = hss
