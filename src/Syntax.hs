@@ -76,7 +76,7 @@ pLisp p n c = pGap *> (n <$ pP "]" <|> c <$> p <*> pCdr) where
     <|> c <$ pP "," <* pGap <*> p <*> pCdr)
 
 pApp :: Exp -> P Exp
-pApp f = (f :$) <$ pP "(" <*> pCSep pExp ")" <|> pure f
+pApp f = (((f :$) <$ pP "(" <*> pCSep pExp ")") >>= pApp) <|> pure f
 
 pCSep :: P x -> String -> P [x]
 pCSep p t = pGap *> ((:) <$> p <*> pMore <|> [] <$ pP t) where

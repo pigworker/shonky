@@ -101,6 +101,6 @@ csep(f,t) ->
   
 app():
 app(f) -> choice(
-  [{seq(gimme([|(|]),['app,f|csep(exp,[|)|])])}
+  [{seq(gimme([|(|]),app(['app,f|csep(exp,[|)|])]))}
   ,{f}
   ])
