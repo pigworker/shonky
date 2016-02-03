@@ -5,8 +5,7 @@ elem(x,y) -> 'ff
 alphaNum -> [|0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz|]
 isAlphaNum(c) -> elem(c,alphaNum)
 
-whitespace -> [| 
- |]
+whitespace -> [| \t\n|]
 isSpace(c) -> elem(c,whitespace)
 
 case(x,f) -> f(x)
@@ -20,9 +19,10 @@ catch(abort,):
 catch(x,f) -> x,
 catch({'abort() -> k},f) -> f()
 
-protect(f) -> {|s -> 'get()
-		t([x,s]) -> 'set(s); x
-	       |}t(state(s,f()))
+protect(f) -> {|
+  s -> 'get()
+  t([x,s]) -> 'set(s); x
+  |}t(state(s,f()))
 
 eat() -> case('get(),{([c|s]) -> 'set(s); c})
 
@@ -58,17 +58,40 @@ map(f,[]) -> []
 
 punc(cs) -> map(gimme,cs); gap()
 
+prog() -> gap(); many({def()/ gap()})
+
 leaf() -> choice([{['var,ident()]}, {['atom,gimme([|'|]);ident()]}])
 
 exp() -> choice(
-  [{app(leaf())}
-  ,{punc([|[|]); lisp(exp)}
-  ,{['let/punc([|{\||]),many({def()/ gap()})/punc([|\|}|]),exp()]}
-  ,{['fun/punc([|{|])| choice(
-     [{[[], [[],exp()]]}
-     ,{[choice([handles,{[]}]) | csep(clause, [])]}
+  [{app(choice(
+     [leaf
+     ,{['text/punc([|\[\||])|text(exp)]}
+     ,{punc([|[|]); lisp(exp)}
+     ,{['fun/punc([|{|])| choice(
+        [{[[], [[],exp()]]}
+        ,{[choice([handles,{[]}]) | csep(clause, [])]}
      ])/ gap(); punc([|}|])]}
+     ]))}
+  ,{['let/map(gimme,[|{\||]),prog()/punc([|\|}|]),exp()]}
   ])
+
+text(f) -> choice(
+  [{[]/map(gimme,[|\|\]|])}
+  ,{[[punc([|\`|]); f()/ punc([|\`|])]|text(f)]}
+  ,{glom(choice([{gimme([|\\|]);esc(eat())},eat]),text(f))}
+  ])
+
+esc('n) -> [|\n|],
+esc('t) -> [|\t|],
+esc('b) -> [|\b|],
+esc(c) -> c
+
+
+glom(c,t) -> case(t,
+  { ([[x]|y]) -> [[|`c`|]|t]
+  , ([x|y]) -> [[|`c``x`|]|y]
+  , (z) -> [[|`c`|]|t]
+  })
 
 handles() -> punc([|(|]); csep({many({ident()/ gap()})}, [|)|])/
   gap(); punc([|:|])
@@ -83,9 +106,11 @@ lisp(f) -> {|
 clause() -> [punc([|(|]); csep(pat,[|)|]), gap(); punc([|->|]); exp()]
 
 pat() -> choice(
-  [{['thunk, punc([|{|]); ident()/ gap(); gimme([|}|])]}
-  ,{['call, punc([|{|]); ident()/ gap(), punc([|(|]); csep(pat,[|)|]),
-     gap(); punc([|->|]); ident()/ gap(); gimme([|}|])]}
+  [{punc([|{|]); choice(
+     [{['thunk,  ident()]}
+     ,{['call, gimme([|'|]); ident(), punc([|(|]); csep(pat,[|)|]),
+        gap(); punc([|->|]); ident()]}
+     ])/ gap(); gimme([|}|])}
   ,{['val, vpat()]}
   ])
 
@@ -99,7 +124,7 @@ def() -> choice([{['val,ident(),gap(); punc([|->|]); exp()]},{rules(ident())}])
 
 rules(f) -> ['def, f| choice(
   [{[handles() | gap(); csep({map(gimme,f); clause()},[])]}
-  ,{[[], clause() | many({gap();map(gimme,f); clause()})]}
+  ,{[[], clause() | many({gap(); punc([|,|]); map(gimme,f); clause()})]}
   ])]
 
 csep(f,t) -> {|

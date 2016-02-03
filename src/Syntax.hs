@@ -52,24 +52,31 @@ pP :: String -> P ()
 pP s = () <$ traverse (pLike pChar . (==)) s
 
 pExp :: P Exp
-pExp = (EV <$> pId >>= pApp)
-     <|> (EA <$ pP "'" <*> pId >>= pApp)
-     <|> EX <$ pP "[|" <*> pText pExp
-     <|> id <$ pP "[" <*> pLisp pExp (EA "") (:&)
-     <|> (:-) <$ pP "{|" <*> many (pGap *> pDef) <* pGap <* pP "|}"
-                 <* pGap <*> pExp
-     <|> thunk <$ pP "{" <* pGap <*> pExp <* pGap <* pP "}"
-     <|> EF <$ pP "{" <* pGap <*>
+pExp = ((EV <$> pId
+       <|> EA <$ pP "'" <*> pId
+       <|> EX <$ pP "[|" <*> pText pExp
+       <|> id <$ pP "[" <*> pLisp pExp (EA "") (:&)
+       <|> thunk <$ pP "{" <* pGap <*> pExp <* pGap <* pP "}"
+       <|> EF <$ pP "{" <* pGap <*>
           (id <$ pP "(" <*> pCSep (many (pId <* pGap)) ")"
               <* pGap <* pP ":" <* pGap
            <|> pure []) <*> pCSep pClause "" <* pGap <* pP "}"
+       ) >>= pApp)
+     <|> (:-) <$ pP "{|" <*> pProg <* pP "|}"
+                 <* pGap <*> pExp
      where thunk e = EF [] [([], e)]
 
 pText :: P x -> P [Either Char x]
-pText p = (:) <$ pP "\\" <*> (Left <$> pChar) <*> pText p
+pText p = (:) <$ pP "\\" <*> (Left <$> (esc <$> pChar)) <*> pText p
     <|> (:) <$ pP "`" <*> (Right <$> p) <* pP "`" <*> pText p
     <|> [] <$ pP "|]"
     <|> (:) <$> (Left <$> pChar) <*> pText p
+
+esc :: Char -> Char
+esc 'n' = '\n'
+esc 't' = '\t'
+esc 'b' = '\b'
+esc c   = c
 
 pLisp :: P x -> x -> (x -> x -> x) -> P x
 pLisp p n c = pGap *> (n <$ pP "]" <|> c <$> p <*> pCdr) where
@@ -124,6 +131,11 @@ pChar :: P Char
 pChar = P $ \ s -> case s of
   (c : s) -> Just (c, s)
   [] -> Nothing
+
+escape :: String -> String
+escape = (>>= help) where
+  help c | elem c "\\[|]`" = ['\\',c]
+  help c = [c]
 
 newtype P x = P {parse :: String -> Maybe (x, String)}
 
