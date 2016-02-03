@@ -53,7 +53,8 @@ pExp = (EV <$> pId >>= pApp)
      <|> (EA <$ pP "'" <*> pId >>= pApp)
      <|> EX <$ pP "[|" <*> pText pExp
      <|> id <$ pP "[" <*> pLisp pExp (EA "") (:&)
-     <|> (:-) <$ pP "{|" <*> pCSep pDef "|}" <* pGap <*> pExp
+     <|> (:-) <$ pP "{|" <*> many (pGap *> pDef) <* pGap <* pP "|}"
+                 <* pGap <*> pExp
      <|> thunk <$ pP "{" <* pGap <*> pExp <* pGap <* pP "}"
      <|> EF <$ pP "{" <* pGap <* pP "(" <*> pCSep (many (pId <* pGap)) ")"
           <* pGap <* pP ":" <* pGap <*>

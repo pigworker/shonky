@@ -189,3 +189,12 @@ prog g ds = g' where
   ev (x := e) = x := v where
     Ret v = compute g' e []
 
+load :: String -> IO Env
+load x = do
+  s <- readFile (x ++ ".uf")
+  let Just (d, "") = parse pProg s
+  return (prog Empty d)
+
+try :: Env -> String -> Comp
+try g s = compute g e [] where
+  Just (e, "") = parse pExp s

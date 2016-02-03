@@ -1,0 +1,106 @@
+elem(,):
+elem(x,[=x|xs]) -> 'tt,
+elem(x,[z|xs]) -> elem(x,xs),
+elem(x,y) -> 'ff
+
+alphaNum -> [|0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz|]
+isAlphaNum():
+isAlphaNum(c) -> elem(c,alphaNum)
+
+whitespace -> [| 
+ |]
+isSpace():
+isSpace(c) -> elem(c,whitespace)
+
+case(,):
+case(x,f) -> f(x)
+
+state(,get set):
+state(s,x) -> [x,s],
+state(s,{get() -> k}) -> state(s,k(s)),
+state(s,{set(s1) -> k}) -> state(s1,k([]))
+
+catch(abort,):
+catch(x,f) -> x,
+catch({abort() -> k},f) -> f()
+
+seq(,):
+seq(x,y) -> y
+
+protect():
+protect(f) -> {|s -> 'get()
+                t():
+		t([x,s]) -> seq('set(s),x)
+	       |}t(state(s,f()))
+
+eat():
+eat() -> case('get(),{():([c|s]) -> seq('set(s),c)})
+
+if(,,):
+if('tt,f,g) -> f(),
+if('ff,f,g) -> g()
+
+like(,):
+like(p,x) -> if(p(x),{x},{'abort()})
+
+many():
+many(f) -> catch([protect(f)|many(f)],{[]})
+
+some():
+some(f) -> [protect(f)|many(f)]
+
+collapse():
+collapse([]) -> [||],
+collapse([x|y]) -> [|`x``collapse(y)`|]
+
+ident():
+ident() -> collapse(some({like(isAlphaNum,eat())}))
+
+gap():
+gap() -> seq(many({like(isSpace,eat())}),[])
+
+choice():
+choice([]) -> 'abort(),
+choice([f|fs]) -> catch(protect(f),{choice(fs)})
+
+eq(,):
+eq(x,=x) -> 'tt,
+eq(x,y) -> 'ff
+
+must():
+must('tt) -> [],
+must('ff) -> 'abort()
+
+gimme():
+gimme(c) -> must(eq(eat(),c))
+
+map(,):
+map(f,[x|xs]) -> [f(x)|map(f,xs)],
+map(f,[]) -> []
+
+gimmes():
+gimmes(cs) -> map(gimme,cs)
+
+exp():
+exp() -> choice(
+  [{app(['var,ident()])}
+  ,{app(['atom,seq(gimme([|'|]),ident())])}
+  ])
+
+csep(,):
+csep(f,t) ->
+  {|more():
+    more() -> seq(gap(),choice(
+      [{[seq(seq(gimme([|,|]),gap()),f())|more()]}
+      ,{seq(gimmes(t),[])}
+      ]))
+  |}seq(gap(),choice(
+  [{[f()|more()]}
+  ,{seq(gimmes(t),[])}
+  ]))
+  
+app():
+app(f) -> choice(
+  [{seq(gimme([|(|]),['app,f|csep(exp,[|)|])])}
+  ,{f}
+  ])
